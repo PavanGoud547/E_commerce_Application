@@ -45,10 +45,13 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/register", "/auth/login").permitAll()
-                        .requestMatchers("/USER/**").hasRole("USER")
-                        .requestMatchers("/CUSTOMER/**").hasRole("CUSTOMER")
-                        .requestMatchers("/ADMINISTRATOR/**").hasRole("ADMINISTRATOR")
+                        .requestMatchers("/auth/register",
+                                "/auth/login",
+                                "/api/products/all",
+                                "/api/products/search").permitAll()
+                        .requestMatchers("/api/products/**").hasRole("ADMINISTRATOR")
+//                        .requestMatchers("/api/products/all","/api/products/search").hasRole("CUSTOMER")
+//                        .requestMatchers("/ADMINISTRATOR/**").hasRole("ADMINISTRATOR")
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
