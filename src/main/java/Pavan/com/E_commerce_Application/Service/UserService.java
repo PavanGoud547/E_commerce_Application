@@ -1,20 +1,17 @@
 package Pavan.com.E_commerce_Application.Service;
-
-import Pavan.com.E_commerce_Application.dto.UserDTO;
-import Pavan.com.E_commerce_Application.model.Role;
 import Pavan.com.E_commerce_Application.model.User;
 import Pavan.com.E_commerce_Application.repository.UserRepository;
+import Pavan.com.E_commerce_Application.dto.UserDTO;
+import Pavan.com.E_commerce_Application.dto.RegisterRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 public class UserService implements UserDetailsService {
@@ -22,51 +19,147 @@ public class UserService implements UserDetailsService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Optional<User> user = userRepository.findByUsername(username);
-        if (user.isEmpty()) {
-            throw new UsernameNotFoundException("User not found with username/Email: " + username);
+    @Transactional
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+
+        return org.springframework.security.core.userdetails.User
+                .withUsername(user.getEmail())
+                .password(user.getPassword())
+                .authorities(user.getRoles().toArray(new String[0]))
+                .accountExpired(false)
+                .accountLocked(false)
+                .credentialsExpired(false)
+                .disabled(!user.isEnabled())
+                .build();
+    }
+
+    @Transactional
+    public User registerUser(RegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Email already exists");
         }
-        return new org.springframework.security.core.userdetails.User(user.get().getUsername(), user.get().getPassword(), getAuthorities(user.get()));
-    }
 
-    private Collection<? extends GrantedAuthority> getAuthorities(User user) {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().toString()));
-    }
-
-    public User save(User user) {
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhoneNumber(request.getPhoneNumber());
+        
+        // If no roles are provided, set default role as USER
+        if (request.getRoles() == null || request.getRoles().isEmpty()) {
+            Set<String> defaultRoles = new HashSet<>();
+            defaultRoles.add("ROLE_USER");
+            user.setRoles(defaultRoles);
+        } else {
+            // Ensure all roles start with "ROLE_"
+            Set<String> formattedRoles = new HashSet<>();
+            for (String role : request.getRoles()) {
+                if (!role.startsWith("ROLE_")) {
+                    formattedRoles.add("ROLE_" + role.toUpperCase());
+                } else {
+                    formattedRoles.add(role);
+                }
+            }
+            user.setRoles(formattedRoles);
+        }
+        
+        user.setEnabled(true);
         return userRepository.save(user);
     }
 
-    public boolean userExists(String username) {
-        return userRepository.findByUsername(username).isPresent();
-    }
-
-
-    public User updateUser(Long id, UserDTO dto) {
-        User user = userRepository.findById(id)
+    @Transactional
+    public User updateUser(Long userId, UserDTO userDTO) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        user.setName(dto.getName());
-        user.setEmail(dto.getEmail());
-        user.setPhone(dto.getPhone());
-        user.setRole(Role.valueOf(dto.getRole()));
+        user.setFirstName(userDTO.getName());
+        user.setLastName(userDTO.getName()); // Assuming name is full name
+        user.setPhoneNumber(userDTO.getPhone());
+        user.setEmail(userDTO.getEmail());
+
+        if (userDTO.getRole() != null) {
+            Set<String> roles = new HashSet<>();
+            roles.add("ROLE_" + userDTO.getRole().toUpperCase());
+            user.setRoles(roles);
+        }
 
         return userRepository.save(user);
     }
 
-    public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+    @Transactional
+    public User updatePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new RuntimeException("Invalid old password");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        return userRepository.save(user);
     }
 
-    public Optional<User> getUserById(Long id) {
-        return userRepository.findById(id);
+    @Transactional
+    public User updateRoles(Long userId, Set<String> newRoles) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Format roles to ensure they start with "ROLE_"
+        Set<String> formattedRoles = new HashSet<>();
+        for (String role : newRoles) {
+            if (!role.startsWith("ROLE_")) {
+                formattedRoles.add("ROLE_" + role.toUpperCase());
+            } else {
+                formattedRoles.add(role);
+            }
+        }
+        user.setRoles(formattedRoles);
+        return userRepository.save(user);
     }
 
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        userRepository.delete(user);
+    }
+
+    public List<User> getUsersByRole(String role) {
+        return userRepository.findByRolesContaining(role);
+    }
+
+    @Transactional(readOnly = true)
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public User getUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+    }
+
+    @Transactional(readOnly = true)
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
+    public UserDTO convertToDTO(User user) {
+        UserDTO dto = new UserDTO();
+        dto.setId(user.getId());
+        dto.setEmail(user.getEmail());
+        dto.setName(user.getFirstName() + " " + user.getLastName());
+        dto.setPhone(user.getPhoneNumber());
+        if (!user.getRoles().isEmpty()) {
+            dto.setRole(user.getRoles().iterator().next().replace("ROLE_", ""));
+        }
+        return dto;
+    }
 }
-

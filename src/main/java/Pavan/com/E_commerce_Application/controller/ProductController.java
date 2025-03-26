@@ -2,59 +2,63 @@ package Pavan.com.E_commerce_Application.controller;
 
 import Pavan.com.E_commerce_Application.Service.ProductService;
 import Pavan.com.E_commerce_Application.model.Product;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/products")
 public class ProductController {
 
-    private final ProductService productService;
+    @Autowired
+    private ProductService productService;
 
-    public ProductController(ProductService productService) {
-        this.productService = productService;
-    }
-
-    @PostMapping("/add")
-    public Product addProduct(@RequestBody Product product) {
-        return productService.addProduct(product);
-    }
-
-    @PutMapping("/update/{id}")
-    public Product updateProduct(@PathVariable Long id, @RequestBody Product product) {
-        return productService.updateProduct(id, product);
-    }
-
-    @DeleteMapping("/delete/{id}")
-    public String deleteProduct(@PathVariable Long id) {
-        productService.deleteProduct(id);
-        return "Product deleted successfully!";
-    }
-
-
-    @GetMapping("/all")
-    @PreAuthorize("hasAuthority('CUSTOMER')")
-    public List<Product> getAllProducts() {
-        return productService.getAllProducts();
+    @GetMapping
+    public ResponseEntity<Page<Product>> getAllProducts(Pageable pageable) {
+        return ResponseEntity.ok(productService.getAllProducts(pageable));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('CUSTOMER')")
-    public Product getProductById(@PathVariable Long id) {
-        return productService.getProductById(id);
+    public ResponseEntity<Product> getProductById(@PathVariable Long id) {
+        return ResponseEntity.ok(productService.getProductById(id));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    public ResponseEntity<Product> createProduct(@Valid @RequestBody Product product) {
+        return ResponseEntity.ok(productService.createProduct(product));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @Valid @RequestBody Product productDetails) {
+        return ResponseEntity.ok(productService.updateProduct(id, productDetails));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
+        productService.deleteProduct(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/category/{categoryId}")
+    public ResponseEntity<Page<Product>> getProductsByCategory(@PathVariable Long categoryId, Pageable pageable) {
+        return ResponseEntity.ok(productService.getProductsByCategory(categoryId, pageable));
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAuthority('CUSTOMER')")
-    public List<Product> searchProducts(@RequestParam String keyword) {
-        return productService.searchProducts(keyword);
+    public ResponseEntity<Page<Product>> searchProducts(@RequestParam String keyword, Pageable pageable) {
+        return ResponseEntity.ok(productService.searchProducts(keyword, pageable));
     }
 
-    @GetMapping("/category/{category}")
-    @PreAuthorize("hasAuthority('CUSTOMER')")
-    public List<Product> getProductsByCategory(@PathVariable String category) {
-        return productService.getProductsByCategory(category);
+    @PutMapping("/{id}/stock")
+    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    public ResponseEntity updateStock(@PathVariable Long id, @RequestParam int quantity) {
+        return (ResponseEntity) ResponseEntity.ok();
     }
 }
